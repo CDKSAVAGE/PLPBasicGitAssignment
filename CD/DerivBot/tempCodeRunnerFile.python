@@ -1,0 +1,104 @@
+import sys
+import asyncio
+from deriv_api import DerivAPI, APIError
+
+app_id = 1089
+api_token = 'MtrZIbR0fpbGXQa'
+
+if len(api_token) == 0:
+    sys.exit("DERIV_TOKEN environment variable is not set")
+
+async def main():
+    api = DerivAPI(app_id=app_id)
+
+    try:
+        # Ping
+        response = await api.ping({'ping': 1})
+        print("Ping Response:", response)
+
+        # Authorize
+        authorize_response = await api.authorize(api_token)
+        print("Authorize Response:", authorize_response)
+
+        # Get Balance
+        balance_response = await api.balance()
+        balance = balance_response['balance']
+        print(f"Your current balance is {balance['currency']} {balance['balance']}")
+
+        # Get active symbols
+        active_symbols = await api.active_symbols({"active_symbols": "brief", "product_type": "basic"})
+        print("Active Symbols:", active_symbols)
+
+        # Get Proposal
+        proposal_response = await api.proposal({
+            "proposal": 1,
+            "amount": 1,
+            "barrier": 0,
+            "basis": "payout",
+            "contract_type": "DIGITUNDER",
+            "duration": 1,
+            "duration_unit": "t",
+            "symbol": "1HZ10V",
+            "prediction": 1
+        })
+        print("Proposal Response:", proposal_response)
+
+        if 'proposal' in proposal_response:
+            proposal_id = proposal_response['proposal']['id']
+            print(f"Proposal ID: {proposal_id}")
+
+            # Buy
+            buy_response = await api.buy({
+                "buy": proposal_id,
+                "price": 1
+            })
+            print("Buy Response:", buy_response)
+
+            if 'buy' in buy_response:
+                contract_id = buy_response['buy']['contract_id']
+                print(f"Contract ID: {contract_id}")
+
+                # Open Contracts
+                poc_response = await api.proposal_open_contract({
+                    "proposal_open_contract": 1,
+                    "contract_id": contract_id
+                })
+                print("Proposal Open Contract Response:", poc_response)
+
+                if 'proposal_open_contract' in poc_response:
+                    is_sold = poc_response['proposal_open_contract']['is_sold']
+                    print(f"Is Sold: {is_sold}")
+
+                    if not is_sold:
+                        # Sell
+                        try:
+                            await asyncio.sleep(1)  # Wait for entry tick
+                            sell_response = await api.sell({
+                                "sell": contract_id,
+                                "price": 1
+                            })
+                            print("Sell Response:", sell_response)
+                        except APIError as e:
+                            print("API Error during sell:", e)
+
+        # Profit Table
+        profit_table_response = await api.profit_table({
+            "profit_table": 1,
+            "description": 1,
+            "sort": "ASC"
+        })
+        print("Profit Table Response:", profit_table_response)
+
+        # Transaction Statement
+        statement_response = await api.statement({
+            "statement": 1,
+            "description": 1,
+            "limit": 100,
+            "offset": 25
+        })
+        print("Transaction Statement Response:", statement_response)
+
+    finally:
+        await api.clear()
+
+asyncio.run(main())
